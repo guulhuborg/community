@@ -1,0 +1,66 @@
+name: Automatic Organization Invitation
+
+# Trigger the workflow when an issue is labeled
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  invite:
+    runs-on: ubuntu-latest
+    steps:
+      # This step handles the invitation process when an issue is labeled
+      - name: Invite on label
+        uses: actions/github-script@v6
+        # Only run this step if the issue has the 'Invitation' label
+        if: github.event.label.name == 'Invitation'
+        with:
+          # Use a personal access token with org admin permissions
+          github-token: ${{ secrets.INVITE_TOKEN }}
+          script: |
+            // Get the username of the person who created the issue
+            const username = context.payload.issue.user.login;
+
+            try {
+              // First get the user's ID using their username, then send the invitation
+              // This is more reliable than using username directly
+              await github.rest.orgs.createInvitation({
+                org: context.repo.owner,
+                invitee_id: (await github.rest.users.getByUsername({ username })).data.id
+              });
+
+              // Post a welcoming comment to inform the user about the invitation
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: `🔥 **Welcome to GuulHub, @${username}!** 🔥 You're now part of an exclusive community of innovators and trailblazers. 🚀 Your invitation is on its way—check your inbox and step into the future with us! ⚡ Let’s build, break, and innovate together. 💡🔒`
+              });
+
+              // Close the issue since the invitation has been sent
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                state: 'closed'
+              });
+
+            } catch (error) {
+              // Log the error for debugging in GitHub Actions logs
+              console.error("🚨 Invitation Error:", error);
+
+              // Post a friendly error message with possible reasons
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: `⚠️ Whoops! Something went sideways while inviting @${username}.  
+                
+                Here's what might be going on:
+                - Already a part of the organization? 🏢
+                - Invitations blocked? 🚫
+                - A mysterious force of nature? 🌪️  
+
+                No worries! We're on it. 🔍 Stay tuned!`
+              });
+            }
